@@ -2,6 +2,7 @@ module Hue.Parser where
 
 import Data.Char (isAlpha, isSpace)
 import Data.List (isPrefixOf)
+import Hue.Either (mapLeft)
 
 data Node
   = NodeSymbol String
@@ -13,6 +14,9 @@ data Node
 data ParsingError
   = ParsingError String String
   deriving (Show, Eq)
+
+withMessage :: String -> ParsingError -> ParsingError
+withMessage msg (ParsingError _ i) = ParsingError msg i
 
 parse :: String -> Either ParsingError Node
 parse input = do
@@ -28,7 +32,7 @@ parse input = do
 
 parseString :: [Char] -> Either ParsingError (Node, [Char])
 parseString input = do
-  afterLhsQuote <- parseTag "\"" i
+  afterLhsQuote <- mapLeft (withMessage "expected string") $ parseTag "\"" i
   let value = takeWhile (/= '\"') afterLhsQuote
    in let afterValue = drop (length value) afterLhsQuote
        in do
@@ -58,7 +62,7 @@ parseTag tag input =
       Left $ ParsingError ("expected tag \"" ++ tag ++ "\"") i
   where
     i = ws input
-    value = tail tag `isPrefixOf` i
+    value = tag `isPrefixOf` i
     rest = drop (length tag) i
 
 ws :: [Char] -> [Char]

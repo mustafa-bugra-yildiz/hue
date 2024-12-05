@@ -1,7 +1,9 @@
 module Main where
 
+import Hue.Either (mapLeft)
+import Hue.Lowering (Bytecode, lower)
 import Hue.Parser (ParsingError, parse)
-import Hue.Typechecker (TypecheckingError, TypedNode, typecheck)
+import Hue.Typechecker (TypecheckingError, typecheck)
 import System.Environment (getArgs)
 
 data Error
@@ -23,15 +25,8 @@ main = do
     _ -> do
       putStrLn "no file given"
 
-pipeline :: String -> Either Error TypedNode
+pipeline :: String -> Either Error Bytecode
 pipeline code = do
   ast <- mapLeft ParsingError $ parse code
   typedAst <- mapLeft TypecheckingError $ typecheck ast
-  Right typedAst
-
-mapLeft :: (a -> c) -> Either a b -> Either c b
-mapLeft f = mapBoth f id
-
-mapBoth :: (a -> c) -> (b -> d) -> Either a b -> Either c d
-mapBoth f _ (Left x) = Left (f x)
-mapBoth _ f (Right x) = Right (f x)
+  Right (lower typedAst)
