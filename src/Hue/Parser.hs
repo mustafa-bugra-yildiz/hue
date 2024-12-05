@@ -14,12 +14,17 @@ data ParsingError
   = ParsingError String String
   deriving (Show, Eq)
 
-parse :: String -> Either ParsingError (Node, String)
+parse :: String -> Either ParsingError Node
 parse input = do
   (symbol, afterSymbol) <- parseSymbol input
   afterEq <- parseTag "=" afterSymbol
   (string, afterString) <- parseString afterEq
-  Right (NodeBind symbol string, afterString)
+  let remaining = ws afterString
+   in if remaining /= ""
+        then
+          Left $ ParsingError "remaining input" remaining
+        else
+          Right $ NodeBind symbol string
 
 parseString :: [Char] -> Either ParsingError (Node, [Char])
 parseString input = do
