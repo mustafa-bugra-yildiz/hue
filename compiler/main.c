@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 char *readFile(char *path) {
   FILE *fp = fopen(path, "r");
@@ -20,6 +21,14 @@ char *readFile(char *path) {
 
   fclose(fp);
   return buffer;
+}
+
+void writeFile(char *path, char *contents, int length) {
+  FILE *fp = fopen(path, "wb");
+  assert(fp);
+
+  fwrite(contents, 1, length, fp);
+  fclose(fp);
 }
 
 void lowerExpr(struct bytecode *bc, struct fn *fn, struct expr *expr) {
@@ -65,25 +74,68 @@ void lowerDecl(struct bytecode *bc, struct decl *decl) {
 }
 
 int main(int argc, char *argv[]) {
-  argc--;
-  argv++;
+  char *inputFile = NULL;
+  char *outputFile = NULL;
+  int shouldPrintAst = 0;
+  int shouldPrintBytecode = 0;
 
-  assert(argc == 1);
+  char c;
+  while ((c = getopt(argc, argv, "i:o:ab")) != -1) {
+    switch (c) {
+    case 'i':
+      inputFile = optarg;
+      break;
+    case 'o':
+      outputFile = optarg;
+      break;
+    case 'a':
+      shouldPrintAst = 1;
+      break;
+    case 'b':
+      shouldPrintBytecode = 1;
+      break;
+    case '?':
+      if (optopt == 'i' || optopt == 'o')
+        fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+      else
+        fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+      return EXIT_FAILURE;
+    default:
+      abort();
+    }
+  }
 
-  char *code = readFile(argv[0]);
+  if (inputFile == NULL) {
+    fprintf(stderr, "Please specify an input file with option -i <path>");
+    return EXIT_FAILURE;
+  }
+  if (outputFile == NULL) {
+    fprintf(stderr, "Please specify an output file with option -o <path>");
+    return EXIT_FAILURE;
+  }
+
+  char *code = readFile(inputFile);
   assert(code);
 
   struct decl *decl = parseDeclFn(&code);
-  printf("\n--- Parsed Code ---\n");
-  printDecl(decl);
+  if (shouldPrintAst) {
+    printf("\n--- Parsed Code ---\n");
+    printDecl(decl);
+  }
 
   struct bytecode *bc = makeBytecode();
   assert(bc);
 
-  printf("\n--- Compiled Bytecode ---\n");
   lowerDecl(bc, decl);
-  printBytecode(bc);
-  putchar('\n');
 
+  if (shouldPrintBytecode) {
+    printf("\n--- Compiled Bytecode ---\n");
+    printBytecode(bc);
+    putchar('\n');
+  }
+
+  int length;
+  char *serializedBytecode = serializeBytecode(bc, &length);
+  writeFile(outputFile, serializedBytecode, length);
   return 0;
 }

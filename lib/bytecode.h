@@ -32,6 +32,8 @@ struct bytecode {
 };
 
 struct bytecode *makeBytecode();
+char *serializeBytecode(struct bytecode *bc, int *length);
+struct bytecode *deserializeBytecode(char *code);
 
 void printBytecode(struct bytecode *bc);
 int appendLiteral(struct bytecode *bc, struct object *object);
