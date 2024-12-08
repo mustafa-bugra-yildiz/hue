@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 char *readFile(char *path) {
@@ -18,6 +19,56 @@ char *readFile(char *path) {
 
   fclose(fp);
   return buffer;
+}
+
+void evalFn(struct bytecode *bc, struct fn *fn) {
+  struct object *stack[80];
+  struct object **sp = stack;
+  struct object *object;
+
+  int pc = 0;
+
+  while (fn->body[pc].type != INST_halt) {
+    struct inst inst = fn->body[pc++];
+    switch (inst.type) {
+    case INST_loadLit:
+      *sp++ = bc->literals[inst.arg];
+      break;
+
+    case INST_print:
+      object = *--sp;
+      switch (object->type) {
+      case OBJECT_string:
+        printf("%s\n", object->string);
+        break;
+      }
+      break;
+
+    case INST_halt:
+      break;
+    }
+  }
+}
+
+void eval(struct bytecode *bc) {
+  assert(bc);
+
+  struct fn *mainFn = NULL;
+
+  for (int i = 0; i < bc->fnsLen; i++) {
+    struct fn *fn = bc->fns[i];
+    if (strcmp(fn->name, "main") == 0) {
+      mainFn = fn;
+      break;
+    }
+  }
+
+  if (mainFn == NULL) {
+    fprintf(stderr, "error: Could not find the main function\n");
+    exit(EXIT_FAILURE);
+  }
+
+  evalFn(bc, mainFn);
 }
 
 int main(int argc, char *argv[]) {
@@ -56,5 +107,6 @@ int main(int argc, char *argv[]) {
   if (shouldPrintBytecode)
     printBytecode(bc);
 
+  eval(bc);
   return 0;
 }
