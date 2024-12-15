@@ -1,6 +1,5 @@
 .PHONY: all
 all:
-	cargo run example.hue > example.s
-	cat example.s
+	cargo run example.hue | tee example.s
 	as example.s
 	rm example.o

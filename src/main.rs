@@ -10,34 +10,41 @@ use std::collections::HashMap;
 
 fn main() -> Result<(), Error> {
     let mut args = std::env::args();
+
     let prog = args.next().ok_or_else(|| Error::ProgNotFound)?;
 
-    match args.next() {
-        Some(file) => {
-            let code = std::fs::read_to_string(file).map_err(Error::CannotReadFile)?;
-            let (rest, ast) = parse(&code).map_err(Error::Parsing)?;
-            if !rest.is_empty() {
-                eprintln!("-- REST --\n{rest}\n");
-            }
+    let Some(file) = args.next() else {
+        eprintln!("Usage: {prog} <file>");
+        std::process::exit(1);
+    };
 
-            eprintln!("-- AST --\n{ast:#?}\n");
-
-            let (strings, ast) = collect_strings(vec![], &ast);
-            eprintln!("-- STRINGS --\n{strings:#?}\n");
-
-            let ctx = lower(strings, ast);
-            eprintln!("-- LOWERING --\n{ctx}\n");
-
-            let ctx = regalloc(ctx)?;
-            eprintln!("-- REGALLOC --\n");
-            println!("{ctx}");
-        }
-        None => {
-            println!("Usage: {prog} <file>");
-        }
+    let code = std::fs::read_to_string(file).map_err(Error::CannotReadFile)?;
+    let (rest, ast) = parse(&code).map_err(Error::Parsing)?;
+    if !rest.is_empty() {
+        edump("REST", &rest);
     }
+    edump_vec("AST", &ast);
+
+    let (strings, ast) = collect_strings(vec![], &ast);
+    let ctx = lower(strings, ast);
+    edump("IR", &ctx);
+
+    let ctx = regalloc(ctx)?;
+    eprintln!("-- ASM --");
+    println!("{ctx}");
 
     Ok(())
+}
+
+fn edump<T: std::fmt::Display>(label: &'static str, v: &T) {
+    eprintln!("-- {label} --\n{v}\n")
+}
+
+fn edump_vec<T: std::fmt::Display>(label: &'static str, v: &[T]) {
+    eprintln!("-- {label} --");
+    for item in v {
+        eprintln!("{item}");
+    }
 }
 
 // Regalloc Stage
@@ -129,7 +136,7 @@ fn lower_decl(decl: Decl<usize>) -> Fn {
 fn lower_expr(reg: VReg, expr: Expr<usize>) -> (VReg, Vec<Inst>) {
     match expr {
         Expr::Binop(op, lhs, rhs) => {
-            let (lhs_reg, lhs_insts) = lower_expr(reg.succ(), *lhs);
+            let (lhs_reg, lhs_insts) = lower_expr(reg, *lhs);
             let (rhs_reg, rhs_insts) = lower_expr(lhs_reg.succ(), *rhs);
             let reg = rhs_reg.succ();
             let insts = vec![]
@@ -199,7 +206,7 @@ fn collect_strings_expr<'a>(
 
 fn parse(i: &str) -> IResult<&str, Vec<Decl<&str>>, nom::error::Error<String>> {
     let inner = || -> IResult<&str, Vec<Decl<&str>>, nom::error::Error<&str>> {
-        let (i, decls) = many0(parse_decl)(i)?;
+        let (i, decls) = many0(delimited(multispace0, parse_decl, multispace0))(i)?;
         let (i, _) = multispace0(i)?;
         Ok((i, decls))
     };
@@ -337,24 +344,38 @@ struct Ctx<'a, R = VReg> {
 
 impl<'a> std::fmt::Display for Ctx<'a, Reg> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (idx, val) in self.strings.iter().enumerate() {
-            write!(f, ".lit{idx}: .ascii \"{val}\"\n")?;
+        let fns: Vec<_> = self.fns.iter().map(|f| format!("{f}")).collect();
+        writeln!(f, "{}", fns.join("\n\n"))?;
+
+        let strings: Vec<_> = self
+            .strings
+            .iter()
+            .enumerate()
+            .map(|(idx, val)| format!(".lit{idx}: .ascii \"{val}\""))
+            .collect();
+        if !strings.is_empty() {
+            writeln!(f, "\n{}", strings.join("\n\n"))?;
         }
-        for fn_ in self.fns.iter() {
-            write!(f, "{}\n", fn_)?;
-        }
+
         Ok(())
     }
 }
 
 impl<'a> std::fmt::Display for Ctx<'a, VReg> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (idx, val) in self.strings.iter().enumerate() {
-            write!(f, ".lit{idx}: .ascii \"{val}\"\n")?;
+        let fns: Vec<_> = self.fns.iter().map(|f| format!("{f}")).collect();
+        writeln!(f, "{}", fns.join("\n\n"))?;
+
+        let strings: Vec<_> = self
+            .strings
+            .iter()
+            .enumerate()
+            .map(|(idx, val)| format!("let $lit{idx} = \"{val}\""))
+            .collect();
+        if !strings.is_empty() {
+            writeln!(f, "\n{}", strings.join("\n\n"))?;
         }
-        for fn_ in self.fns.iter() {
-            write!(f, "{}\n", fn_)?;
-        }
+
         Ok(())
     }
 }
@@ -368,9 +389,9 @@ struct Fn<'a, R = VReg> {
 
 impl<'a> std::fmt::Display for Fn<'a, Reg> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:\n", self.name)?;
+        writeln!(f, "{}:", self.name)?;
         for i in self.insts.iter() {
-            write!(f, "  {}\n", i)?;
+            writeln!(f, "  {}", i)?;
         }
         write!(f, "  ret")?;
         Ok(())
@@ -379,11 +400,11 @@ impl<'a> std::fmt::Display for Fn<'a, Reg> {
 
 impl<'a> std::fmt::Display for Fn<'a, VReg> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:\n", self.name)?;
+        writeln!(f, "fn ${}() {{", self.name)?;
         for i in self.insts.iter() {
-            write!(f, "  {}\n", i)?;
+            writeln!(f, "  {}", i)?;
         }
-        write!(f, "  ret {}", self.ret)?;
+        write!(f, "  ret {}\n}}", self.ret)?;
         Ok(())
     }
 }
@@ -417,7 +438,7 @@ impl std::fmt::Display for Inst<VReg> {
                 }
             ),
             Inst::Mov(dst, val) => write!(f, "{dst} = int #{val}"),
-            Inst::Adr(dst, idx) => write!(f, "{dst} = adr .lit{idx}"),
+            Inst::Adr(dst, idx) => write!(f, "{dst} = adr $lit{idx}"),
         }
     }
 }
@@ -488,6 +509,20 @@ enum Decl<'a, S> {
     Bind(&'a str, Expr<S>),
 }
 
+impl<'a, S: std::fmt::Display> std::fmt::Display for Decl<'a, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Decl::Bind(symbol, expr) => {
+                write!(f, "fn {symbol}\n")?;
+                for line in format!("{expr}").lines() {
+                    write!(f, "  {line}\n")?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 enum Expr<S> {
     Binop(Binop, Box<Expr<S>>, Box<Expr<S>>),
@@ -495,10 +530,42 @@ enum Expr<S> {
     String(S),
 }
 
+impl<S: std::fmt::Display> std::fmt::Display for Expr<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Binop(op, lhs, rhs) => {
+                writeln!(f, "binop {op}")?;
+                for line in format!("{lhs}").lines() {
+                    writeln!(f, "  {line}")?;
+                }
+                for line in format!("{rhs}").lines() {
+                    writeln!(f, "  {line}")?;
+                }
+                Ok(())
+            }
+            Expr::Integer(val) => write!(f, "int {val}"),
+            Expr::String(val) => write!(f, "string '{val}'"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Binop {
     Add,
     Sub,
+}
+
+impl std::fmt::Display for Binop {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Binop::Add => "+",
+                Binop::Sub => "-",
+            }
+        )
+    }
 }
 
 #[derive(Debug)]
