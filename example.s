@@ -1,9 +1,8 @@
 main:
-  mov x0, #1
-  mov x0, #2
-  add x0, x0, x1
-  mov x0, #3
-  sub x0, x0, x1
-  ret x0
-
+  mov X8, #1
+  mov X9, #2
+  add X8, X8, X9
+  mov X9, #3
+  sub X0, X8, X9
+  ret
 
