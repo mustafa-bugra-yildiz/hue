@@ -1,1 +1,1 @@
-main = "hello world"
+main = 1 + 2 - 3
