@@ -1,6 +1,7 @@
 #[derive(Clone, Copy)]
 pub(crate) enum Reg {
     X0,
+    X1,
     X8,
     X9,
     X10,
@@ -14,6 +15,7 @@ impl std::fmt::Display for Reg {
             "{}",
             match self {
                 Reg::X0 => "X0",
+                Reg::X1 => "X1",
                 Reg::X8 => "X8",
                 Reg::X9 => "X9",
                 Reg::X10 => "X10",

@@ -2,6 +2,10 @@ msg:
   adr X0, .lit0
   ret
 
+add:
+  add X0, X0, X1
+  ret
+
 main:
   mov X8, #1
   mov X9, #2
