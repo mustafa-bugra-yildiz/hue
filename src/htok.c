@@ -26,27 +26,40 @@ static char *lexOnce(char *p) {
     return p;
   }
 
-  if (*p == '=') {
-    printf("=\n");
+  if (*p == '-' && *(p + 1) == '>') {
+    printf("->");
+    return p + 2;
+  }
+
+  if (*p == '=' || *p == '+') {
+    printf("%c\n", *p);
     return p + 1;
   }
 
   return NULL;
 }
 
-static void lexLine(char *line) {
+static int lexLine(char *line) {
   char *p;
+  int toks;
 
+  toks = 0;
   p = line;
+
   while ((p = lexOnce(p)))
-    ;
+    toks++;
+
+  return toks;
 }
 
 int main() {
   char line[80];
+  int toks;
 
   while (fgets(line, sizeof(line), stdin)) {
     line[strlen(line) - 1] = '\0';
-    lexLine(line);
+    toks = lexLine(line);
+    if (toks)
+      printf(";\n");
   }
 }

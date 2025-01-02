@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define LINE_SIZE 80
 #define STACK_SIZE 80
@@ -10,10 +11,17 @@
 enum type {
   N_END, // end of pattern
 
+  /* nodes */
   N_FN,
+  N_ADD,
+  N_EXPR,
+
+  /* tokens */
+  N_SEMI,
   N_IDENT,
-  N_EQ,
   N_NUMBER,
+  N_EQ,
+  N_PLUS,
 };
 
 struct node {
@@ -23,6 +31,12 @@ struct node {
       char *ident;
       struct node *number;
     } fn;
+
+    struct {
+      struct node *lhs, *rhs;
+    } add;
+
+    struct node *expr;
 
     char *ident;
     int number;
@@ -36,6 +50,7 @@ struct rule {
 
 struct node **stack, **sp;
 struct rule *rules, *rp;
+int reg;
 
 static void indent(int level) {
   int i = 0;
@@ -44,23 +59,43 @@ static void indent(int level) {
 }
 
 static void printNode(struct node *n, int level) {
-  indent(level);
-
   switch (n->t) {
-  case N_END: /* do nothing */
-    break;
   case N_FN:
-    printf("fn %s\n", n->fn.ident);
+    indent(level), printf("fn %s\n", n->fn.ident);
     printNode(n->fn.number, level + 1);
     break;
+
   case N_IDENT:
-    printf("ident %s\n", n->ident);
+    indent(level), printf("ident %s\n", n->ident);
     break;
+
   case N_EQ:
-    printf("eq\n");
+    indent(level), printf("eq\n");
     break;
+
+  case N_PLUS:
+    indent(level), printf("plus\n");
+    break;
+
+  case N_SEMI:
+    indent(level), printf("semi\n");
+    break;
+
   case N_NUMBER:
-    printf("number %d\n", n->number);
+    indent(level), printf("number %d\n", n->number);
+    break;
+
+  case N_ADD:
+    indent(level), printf("add\n");
+    printNode(n->add.lhs, level + 1);
+    printNode(n->add.rhs, level + 1);
+    break;
+
+  case N_EXPR:
+    printNode(n->expr, level);
+    break;
+
+  case N_END: /* do nothing */
     break;
   }
 }
@@ -104,6 +139,16 @@ static struct node *mkTok(char *tok) {
     return n;
   }
 
+  if (*tok == '+') {
+    n = mkNode(N_PLUS);
+    return n;
+  }
+
+  if (*tok == ';') {
+    n = mkNode(N_SEMI);
+    return n;
+  }
+
   fprintf(stderr, "error: unknown token '%s'\n", tok);
   exit(1);
 }
@@ -139,6 +184,22 @@ static struct node *mkFn(struct node **args) {
   fn->fn.number = number;
 
   return fn;
+}
+
+static struct node *mkAdd(struct node **args) {
+  struct node *expr, *add, *lhs, *rhs;
+
+  lhs = args[0];
+  rhs = args[2];
+
+  add = mkNode(N_ADD);
+  add->add.lhs = lhs;
+  add->add.rhs = rhs;
+
+  expr = mkNode(N_EXPR);
+  expr->expr = add;
+
+  return expr;
 }
 
 static int push() {
@@ -182,17 +243,31 @@ static void reduce() {
   }
 }
 
-static void compile(struct node *n, int level) {
+static int compile(struct node *n, int level) {
+  int lhs, rhs;
+
   switch (n->t) {
   case N_FN:
+    reg = 0;
+
     indent(level), printf("%s:\n", n->fn.ident);
     compile(n->fn.number, level + 1);
     indent(level + 1), printf("ret\n");
-    break;
+
+    return reg;
+
+  case N_ADD:
+    lhs = compile(n->add.lhs, level);
+    rhs = compile(n->add.rhs, level);
+    indent(level), printf("add x%d, x%d, x%d\n", lhs, lhs, rhs);
+    return lhs;
+
+  case N_EXPR:
+    return compile(n->expr, level);
 
   case N_NUMBER:
-    indent(level), printf("mov x0, #%d\n", n->number);
-    break;
+    indent(level), printf("mov x%d, #%d\n", reg, n->number);
+    return reg++;
 
   default:
     fprintf(stderr, "error: cannot compile node type %d\n", n->t);
@@ -200,23 +275,60 @@ static void compile(struct node *n, int level) {
   }
 }
 
-int main() {
+int main(int argc, char *argv[]) {
   struct node **np;
+  int opt;
+  char mode;
 
+  /* opts */
+  mode = 'c'; /* compile */
+  while ((opt = getopt(argc, argv, "p"))) {
+    switch (opt) {
+    case -1:
+      goto GETOPT_DONE;
+
+    case 'p':
+      mode = 'd'; /* debug ast */
+      break;
+
+    default:
+      fprintf(stderr, "error: unknown option %c\n", opt);
+      return 1;
+    }
+  }
+GETOPT_DONE:
+
+  /* init globals */
   stack = calloc(STACK_SIZE, sizeof(stack[0]));
   sp = stack;
 
   rules = calloc(RULES_SIZE, sizeof(rules[0]));
   rp = rules;
 
-  *rp++ = (struct rule){mkFn, {N_IDENT, N_EQ, N_NUMBER}};
+  /* function rules */
+  *rp++ = (struct rule){mkFn, {N_IDENT, N_EQ, N_EXPR, N_SEMI}};
+  *rp++ = (struct rule){mkFn, {N_IDENT, N_EQ, N_ADD, N_SEMI}};
+  *rp++ = (struct rule){mkFn, {N_IDENT, N_EQ, N_NUMBER, N_SEMI}};
+
+  /* expr rules */
+  *rp++ = (struct rule){mkAdd, {N_NUMBER, N_PLUS, N_NUMBER}};
 
   while (push())
     reduce();
 
   np = stack;
-  while (np != sp) {
-    compile(*np, 0);
-    np++;
+
+  if (mode == 'c') {
+    while (np != sp) {
+      compile(*np, 0);
+      np++;
+    }
+  }
+
+  if (mode == 'd') {
+    while (np != sp) {
+      printNode(*np, 0);
+      np++;
+    }
   }
 }
