@@ -1,0 +1,5 @@
+main = #(args)
+  let cave_size = 10
+  let cave_depth = 10
+  let scream_loudness = 1
+  let cave_size * cave_depth * scream_loudness

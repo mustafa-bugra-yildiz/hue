@@ -13,8 +13,8 @@
     </p>
     <p>
       This is
-      <i>the one</i>
-      project I have written over and over, discarding each attempt out of disgust or plain boredom.
+      <i>the one project</i>
+      I have written over and over, discarding each attempt out of disgust or plain boredom.
     </p>
     <p>
       It isn't that what I am trying to build is particularly hard to concieve of or takes so long that I haven't yet finished it, but because I have been so aimless about it that things did not go anywhere interesting or worthy a dime.
@@ -23,42 +23,48 @@
       This time, I plan to take a different approach.
     </p>
     <p>
-      Let us not code.
+      Let us
+      <i>not code</i>.
     </p>
     <p>
-      Let us design.
+      Let us
+      <b>design</b>.
     </p>
     <!-- Table of Contents -->
     <h2>Table of Contents</h2>
     <ul>
       <li><a href="#grammar">Grammar</a></li>
+      <li><a href="#tokenization">Tokenization</a></li>
     </ul>
     <!-- Grammar -->
-    <h2 id="grammar">Grammar</h2>
-    <p>
-      Syntax is described using EBNF (Extended Backus-Naur Form). The whole grammar can be found below with the
-      <code>start</code>
-      production being where parsing starts.
-    </p>
-    <code>
-      <pre>
+    <div id="grammar">
+      <h2>Grammar</h2>
+      <p>
+        Syntax is described using EBNF (Extended Backus-Naur Form). The whole grammar can be found below with the
+        <code>start</code>
+        production being where parsing starts.
+      </p>
+      <code>
+        <pre>
 start = top-level+
 
 ; Top level declarations
 top-level = bind
 
-bind      = ident {bind-arg} "=" expr ";"
-bind-arg  = "(" ident ":" type ")"
-          | ident
+bind      = ident "=" expr ";"
 
 ; Expressions
-expr = match | math
+expr = closure | let | match | math
+
+closure = "#(" ident [type] ")" expr ";"
+
+let = "let" ident "=" expr ";" expr
 
 match        = "match" expr "with" {match-branch}
 match-branch = expr "->" expr [";"]
 
 math = math ("+"|"-") atom
-     | atom
+      | atom
 
 ; Atoms
 atom  = apply
@@ -72,7 +78,23 @@ apply = apply atom
 ident = /[a-zA-Z][a-zA-Z0-9]+/
 
 number = /[0-9]+/
-      </pre>
-    </code>
+
+; Types
+type = "int"
+        </pre>
+      </code>
+    </div>
+    <!-- Tokenization -->
+    <div id="tokenization">
+      <h2>Tokenization</h2>
+      Although tokens are defined in
+      <a href="#grammar">Grammar</a>,
+      indentation was intentionaly left blank because it is signification in tokenization.
+      There are 2 rules:
+      <ul>
+        <li>';' is inserted upon newlines unless the next line is indented higher than current line</li>
+        <li>Multiple adjacent dedents produce single ';'</li>
+      </ul>
+    </div>
   </body>
 </html>
