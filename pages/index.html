@@ -1,1 +1,78 @@
-<h1>The Hue Programming Language Specification</h1>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Hue Programming Language Specification</title>
+    <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css">
+  </head>
+  <body>
+    <h1>The Hue Programming Language Specification</h1>
+    <p>
+      Welcome, here you will find my magnum opus.
+    </p>
+    <p>
+      This is
+      <i>the one</i>
+      project I have written over and over, discarding each attempt out of disgust or plain boredom.
+    </p>
+    <p>
+      It isn't that what I am trying to build is particularly hard to concieve of or takes so long that I haven't yet finished it, but because I have been so aimless about it that things did not go anywhere interesting or worthy a dime.
+    </p>
+    <p>
+      This time, I plan to take a different approach.
+    </p>
+    <p>
+      Let us not code.
+    </p>
+    <p>
+      Let us design.
+    </p>
+    <!-- Table of Contents -->
+    <h2>Table of Contents</h2>
+    <ul>
+      <li><a href="#grammar">Grammar</a></li>
+    </ul>
+    <!-- Grammar -->
+    <h2 id="grammar">Grammar</h2>
+    <p>
+      Syntax is described using EBNF (Extended Backus-Naur Form). The whole grammar can be found below with the
+      <code>start</code>
+      production being where parsing starts.
+    </p>
+    <code>
+      <pre>
+start = top-level+
+
+; Top level declarations
+top-level = bind
+
+bind      = ident {bind-arg} "=" expr ";"
+bind-arg  = "(" ident ":" type ")"
+          | ident
+
+; Expressions
+expr = match | math
+
+match        = "match" expr "with" {match-branch}
+match-branch = expr "->" expr [";"]
+
+math = math ("+"|"-") atom
+     | atom
+
+; Atoms
+atom  = apply
+      | ident
+      | number
+      | "(" expr ")"
+
+apply = apply atom
+      | ident atom
+
+ident = /[a-zA-Z][a-zA-Z0-9]+/
+
+number = /[0-9]+/
+      </pre>
+    </code>
+  </body>
+</html>

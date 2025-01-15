@@ -10,7 +10,7 @@ This time, I plan to take a different approach.
 
 Let us not code.
 
-Let us be.
+Let us design.
 
 ## Acknowledgements
 
